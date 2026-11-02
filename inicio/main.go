@@ -1,45 +1,65 @@
 package main
 
-import "fmt"
+import (
+	"fmt" // Formatação e exibição de texto no terminal
+	"os"  // Interação com o sistema operacional
 
-// Três instruções RISC-V de 32 bits
+	decodificador "simriscv/internal/isa"
+	carregador "simriscv/internal/loader"
+	maquina "simriscv/internal/machine"
+)
+
 func main() {
-	programa := []uint32{
-		0x00500093, // ADDI x1, x0, 5
-		0xffe08113, // ADDI x2, x1, -2
-		0x002081b3, // ADD  x3, x1, x2
+	if erro := executar(); erro != nil {
+		fmt.Fprintln(os.Stderr, "Erro:", erro)
+		os.Exit(1)
+	}
+}
+
+// Demonstra os componentes do simulador usando o programa inicial em arquivo.
+func executar() error {
+	arquivo, erro := os.Open("programs/instrucoes-iniciais.hex")
+	if erro != nil {
+		return fmt.Errorf("abrir programa: %w", erro)
+	}
+	defer arquivo.Close()
+
+	palavras, erro := carregador.LerHex(arquivo)
+	if erro != nil {
+		return erro
+	}
+	computador, erro := maquina.Nova(palavras)
+	if erro != nil {
+		return erro
 	}
 
-	var registradores [32]uint32
-	var pc uint32
-
-	for _, palavra := range programa {
-		opcode := palavra & 0x7f
-		destino := (palavra >> 7) & 0x1f
-		funcao3 := (palavra >> 12) & 0x7
-		fonte1 := (palavra >> 15) & 0x1f
-
-		var resultado uint32
-		var nome string
-
-		switch {
-		case opcode == 0x13 && funcao3 == 0: // ADDI
-			imediato := int32(palavra) >> 20
-			resultado = registradores[fonte1] + uint32(imediato)
-			nome = "ADDI"
-		case opcode == 0x33 && funcao3 == 0 && palavra>>25 == 0: // ADD
-			fonte2 := (palavra >> 20) & 0x1f
-			resultado = registradores[fonte1] + registradores[fonte2]
-			nome = "ADD"
-		default:
-			fmt.Printf("Instrução não suportada: 0x%08x\n", palavra)
-			return
+	for !computador.Concluida() {
+		antes := computador.Registradores()
+		passo, erro := computador.Passo()
+		if erro != nil {
+			return erro
 		}
-
-		if destino != 0 { // x0 é sempre zero
-			registradores[destino] = resultado
+		// A instrução já executada é decodificada aqui apenas para exibição.
+		instrucao, erro := decodificador.Decodificar(passo.Palavra)
+		if erro != nil {
+			return erro
 		}
-		fmt.Printf("PC=%d  %s  x%d=%d\n", pc, nome, destino, registradores[destino])
-		pc += 4
+		fmt.Printf("PC=%d | palavra=0x%08x\n", passo.PC, passo.Palavra)
+		switch instrucao.Operacao {
+		case decodificador.ADDI:
+			fmt.Printf("  ADDI x%d, x%d, %d\n", instrucao.Destino, instrucao.Fonte1, instrucao.ImediatoI)
+			fmt.Printf("  Cálculo: %d + (%d)\n", int32(antes[instrucao.Fonte1]), instrucao.ImediatoI)
+		case decodificador.ADD:
+			fmt.Printf("  ADD x%d, x%d, x%d\n", instrucao.Destino, instrucao.Fonte1, instrucao.Fonte2)
+			fmt.Printf("  Cálculo: %d + %d\n", int32(antes[instrucao.Fonte1]), int32(antes[instrucao.Fonte2]))
+		}
+		depois := computador.Registradores()
+		fmt.Printf("  Registrador x%d: %d --> %d\n", instrucao.Destino, int32(antes[instrucao.Destino]), int32(depois[instrucao.Destino]))
+		if instrucao.Destino == 0 {
+			fmt.Println("  Escrita descartada: x0 permanece zero.")
+		}
+		fmt.Printf("  PC: %d --> %d\n\n", passo.PC, passo.ProximoPC)
 	}
+	fmt.Printf("PC final = %d\n", computador.PC())
+	return nil
 }

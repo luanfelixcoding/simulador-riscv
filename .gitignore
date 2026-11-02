@@ -1,0 +1,9 @@
+.DS_Store
+Thumbs.db
+/simriscv
+/simriscv.exe
+/bin/
+/dist/
+*.test
+coverage.out
+coverage.html

@@ -4,7 +4,7 @@ package maquina
 import (
 	"encoding/binary" // Leitura e escrita de dados binários
 	"errors"          // Criação e manipulação de erros simples
-	"fmt"             // Formatação e exibição de texto no terminal
+	"fmt"
 
 	decodificador "simriscv/internal/isa"
 )
@@ -64,31 +64,106 @@ func (maquina *Maquina) Passo() (ResultadoPasso, error) {
 	if erro != nil {
 		return ResultadoPasso{}, fmt.Errorf("PC=0x%08x: %w", pc, erro)
 	}
+
+	// Calcula em uma cópia: erros não deixam escritas parciais nos registradores.
+	regs := maquina.registradores
+	a, b := regs[instrucao.Fonte1], regs[instrucao.Fonte2]
+	imm := uint32(instrucao.ImediatoI)
+	proximoPC := pc + 4
 	var valor uint32
 	escreverRegistrador := true
 	switch instrucao.Operacao {
+	case decodificador.ADD:
+		valor = a + b
+	case decodificador.SUB:
+		valor = a - b
+	case decodificador.ADDI:
+		valor = a + imm
+	case decodificador.SLL:
+		valor = a << (b & 31)
+	case decodificador.SRL:
+		valor = a >> (b & 31)
+	case decodificador.SRA:
+		valor = uint32(int32(a) >> (b & 31))
+	case decodificador.SLLI:
+		valor = a << (imm & 31)
+	case decodificador.SRLI:
+		valor = a >> (imm & 31)
+	case decodificador.SRAI:
+		valor = uint32(int32(a) >> (imm & 31))
+	case decodificador.SLT:
+		valor = bit(int32(a) < int32(b))
+	case decodificador.SLTU:
+		valor = bit(a < b)
+	case decodificador.SLTI:
+		valor = bit(int32(a) < instrucao.ImediatoI)
+	case decodificador.SLTIU:
+		valor = bit(a < imm)
+	case decodificador.XOR:
+		valor = a ^ b
+	case decodificador.OR:
+		valor = a | b
+	case decodificador.AND:
+		valor = a & b
+	case decodificador.XORI:
+		valor = a ^ imm
+	case decodificador.ORI:
+		valor = a | imm
+	case decodificador.ANDI:
+		valor = a & imm
+	case decodificador.BEQ, decodificador.BNE, decodificador.BLT, decodificador.BGE, decodificador.BLTU, decodificador.BGEU:
+		escreverRegistrador = false
+		tomar := false
+		switch instrucao.Operacao {
+		case decodificador.BEQ:
+			tomar = a == b
+		case decodificador.BNE:
+			tomar = a != b
+		case decodificador.BLT:
+			tomar = int32(a) < int32(b)
+		case decodificador.BGE:
+			tomar = int32(a) >= int32(b)
+		case decodificador.BLTU:
+			tomar = a < b
+		case decodificador.BGEU:
+			tomar = a >= b
+		}
+		if tomar {
+			proximoPC = pc + uint32(instrucao.ImediatoB)
+		}
 	case decodificador.LW:
-		endereco := maquina.registradores[instrucao.Fonte1] + uint32(instrucao.ImediatoI)
-		valor, erro = maquina.LerPalavra(endereco)
+		valor, erro = maquina.LerPalavra(a + imm)
 		if erro != nil {
 			return ResultadoPasso{}, fmt.Errorf("PC=0x%08x LW: %w", pc, erro)
 		}
 	case decodificador.SW:
-		endereco := maquina.registradores[instrucao.Fonte1] + uint32(instrucao.ImediatoS)
-		if erro := maquina.EscreverPalavra(endereco, maquina.registradores[instrucao.Fonte2]); erro != nil {
+		escreverRegistrador = false
+		if erro = maquina.EscreverPalavra(a+uint32(instrucao.ImediatoS), b); erro != nil {
 			return ResultadoPasso{}, fmt.Errorf("PC=0x%08x SW: %w", pc, erro)
 		}
-		escreverRegistrador = false
-	case decodificador.ADDI:
-		valor = maquina.registradores[instrucao.Fonte1] + uint32(instrucao.ImediatoI)
-	case decodificador.ADD:
-		valor = maquina.registradores[instrucao.Fonte1] + maquina.registradores[instrucao.Fonte2]
+	case decodificador.MIN:
+		valor = a
+		if int32(b) < int32(a) {
+			valor = b
+		}
 	default:
 		return ResultadoPasso{}, fmt.Errorf("operação não implementada: %s", instrucao.Operacao)
 	}
-	if escreverRegistrador && instrucao.Destino != 0 {
-		maquina.registradores[instrucao.Destino] = valor
+	if proximoPC%4 != 0 {
+		return ResultadoPasso{}, fmt.Errorf("PC de destino desalinhado: 0x%08x", proximoPC)
 	}
-	maquina.pc += 4
-	return ResultadoPasso{PC: pc, ProximoPC: maquina.pc, Palavra: palavra, Operacao: instrucao.Operacao}, nil
+	if escreverRegistrador && instrucao.Destino != 0 {
+		regs[instrucao.Destino] = valor
+	}
+	regs[0] = 0
+	maquina.registradores = regs
+	maquina.pc = proximoPC
+	return ResultadoPasso{PC: pc, ProximoPC: proximoPC, Palavra: palavra, Operacao: instrucao.Operacao}, nil
+}
+
+func bit(condicao bool) uint32 {
+	if condicao {
+		return 1
+	}
+	return 0
 }

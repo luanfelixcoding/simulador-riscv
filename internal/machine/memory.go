@@ -15,7 +15,7 @@ func validarEndereco(endereco uint32) error {
 	return nil
 }
 
-// LerPalavra lê quatro bytes da RAM em ordem little-endian
+// LerPalavra lê quatro bytes alinhados em ordem little-endian.
 func (maquina *Maquina) LerPalavra(endereco uint32) (uint32, error) {
 	if erro := validarEndereco(endereco); erro != nil {
 		return 0, erro
@@ -23,8 +23,7 @@ func (maquina *Maquina) LerPalavra(endereco uint32) (uint32, error) {
 	return binary.LittleEndian.Uint32(maquina.memoria[endereco : endereco+4]), nil
 }
 
-// EscreverPalavra valida antes de gravar, preservando a RAM em caso de erro
-// Código e dados compartilham a RAM, onde as escritas podem modificar instruções.
+// EscreverPalavra valida antes de gravar. Código e dados compartilham a RAM.
 func (maquina *Maquina) EscreverPalavra(endereco, valor uint32) error {
 	if erro := validarEndereco(endereco); erro != nil {
 		return erro

@@ -1,0 +1,11 @@
+# Soma de 1 ate 5; x1=contador, x2=limite, x3=soma
+00100093 # ADDI x1,x0,1
+00600113 # ADDI x2,x0,6
+00000193 # ADDI x3,x0,0
+001181b3 # ADD x3,x3,x1
+00108093 # ADDI x1,x1,1
+fe20cce3 # BLT x1,x2,-8
+10302023 # SW x3,256(x0)
+10002203 # LW x4,256(x0)
+ffd00293 # ADDI x5,x0,-3
+0a524333 # MIN x6,x4,x5: menor entre 15 e -3

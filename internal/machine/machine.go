@@ -2,21 +2,18 @@
 package maquina
 
 import (
-	"encoding/binary" // Leitura e escrita de dados binários
-	"errors"          // Criação e manipulação de erros simples
+	"errors" // Criação e manipulação de erros simples
 	"fmt"
 
 	decodificador "simriscv/internal/isa"
 )
-
-const TamanhoRAM = 0x80000
 
 var ErroProgramaConcluido = errors.New("fim do programa carregado")
 
 type Maquina struct {
 	registradores [32]uint32
 	pc            uint32
-	memoria       []byte
+	barramento    *Barramento
 	bytesPrograma uint32
 }
 
@@ -31,12 +28,27 @@ type ResultadoPasso struct {
 // Os bytes de cada palavra são armazenados do menos ao mais significativo
 func Nova(palavras []uint32) (*Maquina, error) {
 	if len(palavras) > TamanhoRAM/4 {
-		return nil, fmt.Errorf("programa excede a RAM: %d palavras", len(palavras))
+		return nil, fmt.Errorf(
+			"programa excede a RAM: %d palavras",
+			len(palavras),
+		)
 	}
-	maquina := &Maquina{memoria: make([]byte, TamanhoRAM), bytesPrograma: uint32(len(palavras) * 4)}
+
+	ram := NovaRAM()
+
+	maquina := &Maquina{
+		barramento:    NovoBarramento(ram),
+		bytesPrograma: uint32(len(palavras) * 4),
+	}
+
 	for indice, palavra := range palavras {
-		binary.LittleEndian.PutUint32(maquina.memoria[indice*4:indice*4+4], palavra)
+		endereco := uint32(indice * 4)
+
+		if erro := maquina.EscreverPalavra(endereco, palavra); erro != nil {
+			return nil, fmt.Errorf("carregar programa: %w", erro)
+		}
 	}
+
 	return maquina, nil
 }
 
@@ -59,7 +71,15 @@ func (maquina *Maquina) Passo() (ResultadoPasso, error) {
 	if pc%4 != 0 || pc > maquina.bytesPrograma || maquina.bytesPrograma-pc < 4 {
 		return ResultadoPasso{}, fmt.Errorf("PC fora do programa ou desalinhado: 0x%08x", pc)
 	}
-	palavra := binary.LittleEndian.Uint32(maquina.memoria[pc : pc+4])
+	palavra, erro := maquina.LerPalavra(pc)
+	if erro != nil {
+		return ResultadoPasso{}, fmt.Errorf(
+			"busca no PC=0x%08x: %w",
+			pc,
+			erro,
+		)
+	}
+
 	instrucao, erro := decodificador.Decodificar(palavra)
 	if erro != nil {
 		return ResultadoPasso{}, fmt.Errorf("PC=0x%08x: %w", pc, erro)

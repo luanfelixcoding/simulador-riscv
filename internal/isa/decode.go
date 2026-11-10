@@ -59,7 +59,8 @@ func Decodificar(p uint32) (Instrucao, error) {
 		if i.Funcao7 == 0x20 {
 			i.Operacao = map[uint32]Operacao{0: SUB, 5: SRA}[i.Funcao3]
 		}
-		if i.Funcao7 == 5 && i.Funcao3 == 4 {
+	case 0x0b: // MIN customizada (grupo 6)
+		if i.Funcao7 == 0 && i.Funcao3 == 0 {
 			i.Operacao = MIN
 		}
 	case 0x13:

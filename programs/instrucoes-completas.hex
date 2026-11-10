@@ -8,4 +8,4 @@ fe20cce3 # BLT x1,x2,-8
 10302023 # SW x3,256(x0)
 10002203 # LW x4,256(x0)
 ffd00293 # ADDI x5,x0,-3
-0a524333 # MIN x6,x4,x5: menor entre 15 e -3
+0052030b # MIN x6,x4,x5: menor entre 15 e -3

@@ -1,0 +1,57 @@
+ff800093 # PC=0x000: ADDI x1,x0,-8: x1=0xfffffff8
+00300113 # PC=0x004: ADDI x2,x0,3: x2=3
+002081b3 # PC=0x008: ADD x3,x1,x2: x3=-5
+40208233 # PC=0x00c: SUB x4,x1,x2: x4=-11
+002092b3 # PC=0x010: SLL x5,x1,x2: x5=-64
+0020a333 # PC=0x014: SLT x6,x1,x2: x6=1
+0020b3b3 # PC=0x018: SLTU x7,x1,x2: x7=0
+0020c433 # PC=0x01c: XOR x8,x1,x2: x8=0xfffffffb
+0020d4b3 # PC=0x020: SRL x9,x1,x2: x9=0x1fffffff
+4020d533 # PC=0x024: SRA x10,x1,x2: x10=-1
+0020e5b3 # PC=0x028: OR x11,x1,x2: x11=0xfffffffb
+0020f633 # PC=0x02c: AND x12,x1,x2: x12=0
+00a08693 # PC=0x030: ADDI x13,x1,10: x13=2
+ff90a713 # PC=0x034: SLTI x14,x1,-7: x14=1
+fff13793 # PC=0x038: SLTIU x15,x2,-1: x15=1
+fff0c813 # PC=0x03c: XORI x16,x1,-1: x16=7
+00816893 # PC=0x040: ORI x17,x2,8: x17=11
+00f0f913 # PC=0x044: ANDI x18,x1,15: x18=8
+00411993 # PC=0x048: SLLI x19,x2,4: x19=48
+0020da13 # PC=0x04c: SRLI x20,x1,2: x20=0x3ffffffe
+4020da93 # PC=0x050: SRAI x21,x1,2: x21=-2
+00208b0b # PC=0x054: MIN x22,x1,x2: x22=-8 (custom-0)
+41602023 # PC=0x058: SW x22,1024(x0): RAM[0x400]=-8 (fora do código)
+40002b83 # PC=0x05c: LW x23,1024(x0): x23=-8
+
+# Cada desvio é executado uma vez tomado e uma vez não tomado.
+00108463 # PC=0x060: BEQ x1,x1,+8: tomado; pular erro
+001f8f93 # PC=0x064: ADDI x31,x31,1: NÃO deve executar
+00208463 # PC=0x068: BEQ x1,x2,+8: não tomado
+001f0f13 # PC=0x06c: ADDI x30,x30,1: contabilizar par verificado
+00209463 # PC=0x070: BNE x1,x2,+8: tomado; pular erro
+001f8f93 # PC=0x074: ADDI x31,x31,1: NÃO deve executar
+00109463 # PC=0x078: BNE x1,x1,+8: não tomado
+001f0f13 # PC=0x07c: ADDI x30,x30,1: contabilizar par verificado
+0020c463 # PC=0x080: BLT x1,x2,+8: tomado; pular erro
+001f8f93 # PC=0x084: ADDI x31,x31,1: NÃO deve executar
+00114463 # PC=0x088: BLT x2,x1,+8: não tomado
+001f0f13 # PC=0x08c: ADDI x30,x30,1: contabilizar par verificado
+00115463 # PC=0x090: BGE x2,x1,+8: tomado; pular erro
+001f8f93 # PC=0x094: ADDI x31,x31,1: NÃO deve executar
+0020d463 # PC=0x098: BGE x1,x2,+8: não tomado
+001f0f13 # PC=0x09c: ADDI x30,x30,1: contabilizar par verificado
+00116463 # PC=0x0a0: BLTU x2,x1,+8: tomado; pular erro
+001f8f93 # PC=0x0a4: ADDI x31,x31,1: NÃO deve executar
+0020e463 # PC=0x0a8: BLTU x1,x2,+8: não tomado
+001f0f13 # PC=0x0ac: ADDI x30,x30,1: contabilizar par verificado
+0020f463 # PC=0x0b0: BGEU x1,x2,+8: tomado; pular erro
+001f8f93 # PC=0x0b4: ADDI x31,x31,1: NÃO deve executar
+00117463 # PC=0x0b8: BGEU x2,x1,+8: não tomado
+001f0f13 # PC=0x0bc: ADDI x30,x30,1: contabilizar par verificado
+
+# Laço de duas iterações para fazer desvio para trás.
+00200c13 # PC=0x0c0: ADDI x24,x0,2
+fffc0c13 # PC=0x0c4: ADDI x24,x24,-1: termina com zero
+fe0c1ee3 # PC=0x0c8: BNE x24,x0,-4: tomado e depois não tomado
+07b00013 # PC=0x0cc: ADDI x0,x0,123: escrita descartada
+41e02223 # PC=0x0d0: SW x30,1028(x0): RAM[0x404]=6

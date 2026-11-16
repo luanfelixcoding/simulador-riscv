@@ -7,7 +7,6 @@ import (
 
 const TamanhoRAM = 0x80000
 
-// RAM armazena os bytes; o barramento encaminha os acessos.
 type RAM struct {
 	dados []byte
 }

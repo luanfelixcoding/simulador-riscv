@@ -1,0 +1,13 @@
+08000093 # ADDI x1,x0,128
+00c09093 # SLLI x1,x1,12: VRAM 0x80000
+04b00113 # K
+00811113 # desloca K
+04f10113 # palavra ASCII OK
+0020a023 # SW x2,0(x1): OK na VRAM
+0000a183 # LW x3,0(x1)
+27f00213 # base E/S
+00a21213 # 0x9fc00
+00822283 # LW x5,8(x4): estado
+00422303 # LW x6,4(x4): entrada
+00622023 # SW x6,0(x4): eco
+00822383 # LW x7,8(x4): estado após leitura

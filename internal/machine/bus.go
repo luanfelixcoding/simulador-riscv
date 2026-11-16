@@ -13,42 +13,55 @@ const (
 // Barramento conecta a CPU aos dispositivos de memória.
 // Os campos públicos registram a última transferência concluída.
 type Barramento struct {
-	Endereco uint32
-	Dados    uint32
-	Controle Controle
-	ram      *RAM
+	Endereco    uint32
+	Dados       uint32
+	Controle    Controle
+	ram         *RAM
+	vram        *VRAM
+	perifericos *Perifericos
 }
 
 func NovoBarramento(ram *RAM) *Barramento {
-	return &Barramento{ram: ram}
+	return &Barramento{ram: ram, vram: &VRAM{}, perifericos: &Perifericos{}}
 }
 
 func (b *Barramento) transferir(
 	endereco, dados uint32,
 	controle Controle,
 ) (uint32, error) {
-	// Nesta etapa, somente a faixa da RAM está conectada.
-	if endereco >= TamanhoRAM {
-		return 0, fmt.Errorf(
-			"endereço sem dispositivo conectado: 0x%08x",
-			endereco,
-		)
+	if endereco%4 != 0 {
+		return 0, fmt.Errorf("endereço desalinhado: 0x%08x", endereco)
 	}
-
-	if b.ram == nil {
-		return 0, fmt.Errorf("RAM não conectada ao barramento")
+	var dispositivo interface {
+		LerPalavra(uint32) (uint32, error)
+		EscreverPalavra(uint32, uint32) error
+	}
+	local := endereco
+	switch {
+	case endereco < TamanhoRAM:
+		if b.ram == nil {
+			return 0, fmt.Errorf("RAM não conectada")
+		}
+		dispositivo = b.ram
+	case endereco >= InicioVRAM && endereco < InicioVRAM+TamanhoVRAM:
+		dispositivo = b.vram
+		local -= InicioVRAM
+	case endereco >= PortaSaida && endereco <= 0x9ffff:
+		dispositivo = b.perifericos
+	default:
+		return 0, fmt.Errorf("endereço reservado ou sem dispositivo: 0x%08x", endereco)
 	}
 
 	switch controle {
 	case Leitura:
-		valor, erro := b.ram.LerPalavra(endereco)
+		valor, erro := dispositivo.LerPalavra(local)
 		if erro != nil {
 			return 0, erro
 		}
 		dados = valor
 
 	case Escrita:
-		if erro := b.ram.EscreverPalavra(endereco, dados); erro != nil {
+		if erro := dispositivo.EscreverPalavra(local, dados); erro != nil {
 			return 0, erro
 		}
 

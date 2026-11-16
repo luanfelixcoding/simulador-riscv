@@ -7,11 +7,11 @@ Projeto para matéria de `Organização de Computadores`.
 - `cmd/simriscv` contém a entrada do programa
 - `internal/loader` lê o arquivo hexadecimal
 - `internal/isa` extrai os campos e decodifica a instrução
-- `internal/machine` guarda os registradores e busca a palavra na memória usando o PC
+- `internal/machine` implementa CPU, RAM, barramento, VRAM e periféricos de E/S programada
 
 O arquivo aceita uma palavra de oito dígitos hexadecimais por linha, prefixo `0x` opcional, linhas vazias e comentários com `#`. As palavras são gravadas em little-endian na RAM de 512 KiB.
 
-`Passo()` executa uma instrução. O PC avança quatro bytes, exceto nos desvios tomados. A execução termina quando o PC chega exatamente ao fim do programa carregado. Um PC fora desse trecho produz erro na próxima busca. `x0` permanece zero. Erros preservam PC, registradores e memória.
+`Passo()` executa uma instrução. O PC avança quatro bytes, exceto nos desvios tomados. A execução termina quando o PC chega exatamente ao fim do programa carregado. Um PC fora desse trecho produz erro na próxima busca. `x0` permanece zero. Erros de instrução ou acesso são reportados sem avançar o PC. Leituras da porta de entrada consomem um caractere; o barramento registra a última transferência concluída.
 
 ## Instruções disponíveis
 
@@ -42,7 +42,7 @@ go run ./cmd/simriscv -programa programs/instrucoes-completas.hex
 
 O exemplo inicial resulta em x1=5, x2=3 e x3=8, em três passos. O arquivo `instrucoes-completas.hex` demonstra um laço de soma (1+2+3+4+5), armazenamento e leitura de 15 na memória e MIN entre 15 e -3. Ao final, `x3=x4=15` e `x5=x6=0xfffffffd (-3)`, em 22 passos.
 
-Falta Barramento, VRAM, periféricos, interrupções e cache.
+Barramento, VRAM e E/S programada estão implementados. Ainda faltam tratamento de interrupções e teclado interativo; cache e pipeline são recursos extras não implementados.
 
 ## Programa de teste de todas as instruções
 
@@ -56,7 +56,50 @@ go run ./cmd/simriscv -programa programs/teste-todas-instrucoes.hex
 
 Resultado esperado: **49 passos**, **PC=0x000000d4**, `x30=6`, `x31=0`, `x24=0` e `x0=0`. MIN coloca -8 (`0xfffffff8`) em x22, SW grava esse valor em RAM[0x400] e LW o recupera em x23. RAM[0x404] recebe 6. Os dados ficam fora dos 212 bytes de código.
 
-`x30` conta os seis pares de desvios verificados e `x31` deve permanecer zero, esses contadores não validam sozinhos todas as operações. O teste Go confere os 32 registradores finais, as duas palavras de dados, o término e a execução efetiva das 28 operações, além dos dois caminhos de cada desvio. Os testes unitários continuam cobrindo outros casos-limite. Este exemplo não inclui os recursos ainda pendentes da Etapa 3.
+`x30` conta os seis pares de desvios verificados e `x31` deve permanecer zero. Esses contadores não validam sozinhos todas as operações: compare também os demais resultados com os comentários do arquivo. Atualmente não há arquivos de testes automatizados Go (`_test.go`) no projeto.
+
+## Barramento e mapa de memória
+
+A CPU acessa os dispositivos pelo barramento, que usa endereços e dados de 32 bits e controle de leitura/escrita. O carregamento do programa, a busca de instruções, LW e SW utilizam esse caminho. O barramento registra a última transferência concluída.
+
+| Faixa | Uso |
+|---|---|
+| `0x00000 - 0x7ffff` | RAM principal: 512 KiB |
+| `0x80000 - 0x8ffff` | VRAM: 64 KiB |
+| `0x90000 - 0x9fbff` | Reservada para expansão futura; acessos rejeitados |
+| `0x9fc00 - 0x9ffff` | Região de periféricos; somente as portas abaixo estão implementadas |
+
+Os acessos LW/SW exigem alinhamento de quatro bytes. Endereços reservados, portas não implementadas e operações sem permissão geram erro. Para acessar o vetor da VRAM, o barramento subtrai `0x80000` do endereço global.
+
+## VRAM e exibição ASCII
+
+SW escreve quatro bytes em little-endian na VRAM e LW pode lê-los de volta. Cada byte representa um caractere. Por exemplo, `0x00004b4f` grava os bytes `4f 4b 00 00`, formando "OK".
+
+O terminal apresenta a VRAM a cada `-video-a-cada N` instruções (padrão: 10) e ao sair da execução, inclusive por erro ou limite de passos. Conteúdo vazio não é impresso. Zeros finais são omitidos da exibição; zeros internos e controles não exibíveis viram espaços. São preservados ASCII imprimível, tabulação e quebra de linha. Não há tela gráfica.
+
+## E/S programada
+
+Os endereços específicos e bits de estado são convenções do simulador dentro da região de periféricos do enunciado, não instruções adicionais da ISA.
+
+| Porta | Permissão | Comportamento |
+|---|---|---|
+| `0x9fc00` | Escrita com SW | Envia o byte inferior à fila de saída; os outros 24 bits são descartados |
+| `0x9fc04` | Leitura com LW | Retira um byte da fila de entrada e o devolve em 32 bits; retorna zero se vazia |
+| `0x9fc08` | Leitura com LW | Estado: bit 0 indica entrada disponível; bit 1 indica saída pronta |
+
+O estado é 3 quando há entrada e 2 quando a fila está vazia. A saída está sempre pronta neste modelo. Consulte o estado para distinguir ausência de entrada de um caractere de valor zero. A saída é consumida e exibida com o prefixo `[E/S]` após cada instrução.
+
+A opção `-entrada` fornece texto ASCII antes da execução. Não há captura de teclado durante a execução nem interrupções. Letras acentuadas são rejeitadas nessa opção.
+
+### Exemplo de VRAM e E/S
+
+```sh
+go run ./cmd/simriscv -programa programs/vram-es.hex -entrada A -video-a-cada 10
+```
+
+O exemplo termina em 13 passos, com PC `0x34`. Mostra "OK" na VRAM e `[E/S] A`. Resultados: `x1=0x80000`, `x2=x3=0x4b4f`, `x4=0x9fc00`, `x5=3`, `x6=0x41` e `x7=2`.
+
+O programa lê o estado, mas não aguarda entrada em um laço: tenta ler um caractere uma vez. Se nenhuma entrada for fornecida, retorna zero e a saída é apresentada como espaço. Para exercitar as 28 instruções, use também `teste-todas-instrucoes.hex`.
 
 ## Executar
 
@@ -76,7 +119,7 @@ go version
 go run ./cmd/simriscv -programa programs/instrucoes-iniciais.hex
 ```
 
-Também é possível usar `go run ./cmd/simriscv`, pois o arquivo acima é o padrão. `-max-passos N` limita o número de instruções, o valor padrão é 100. `go run ./cmd/simriscv -help` mostra as opções.
+Também é possível usar `go run ./cmd/simriscv`, pois o arquivo acima é o padrão. `-max-passos N` limita o número de instruções, o valor padrão é 100. `-video-a-cada N` define o intervalo de exibição da VRAM e deve ser positivo. `-entrada TEXTO` prepara a fila de entrada ASCII. `go run ./cmd/simriscv -help` mostra as opções.
 
 Para compilar, use `go build -o simriscv ./cmd/simriscv` no macOS ou `go build -o simriscv.exe ./cmd/simriscv` no Windows.
 

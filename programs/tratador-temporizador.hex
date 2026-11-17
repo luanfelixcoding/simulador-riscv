@@ -1,0 +1,7 @@
+# tratador-temporizador.hex; palavras reais de 32 bits.
+20002083 # +0x000: LW x1,512(x0): contador de interrupções
+00108093 # +0x004: ADDI x1,x1,1
+20102023 # +0x008: SW x1,512(x0)
+27f00113 # +0x00c: ADDI x2,x0,639
+00a11113 # +0x010: SLLI x2,x2,10: 0x9fc00
+00012623 # +0x014: SW x0,12(x2): retorno de interrupção

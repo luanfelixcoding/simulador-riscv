@@ -31,7 +31,6 @@ func (v *VRAM) EscreverPalavra(e, d uint32) error {
 	return nil
 }
 
-
 func textoASCII(dados []byte) string {
 	var s strings.Builder
 	for _, c := range dados {

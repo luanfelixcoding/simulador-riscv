@@ -9,4 +9,3 @@ coverage.out
 coverage.html
 *.md
 *.pdf
-*_test.go

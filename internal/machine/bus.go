@@ -19,6 +19,7 @@ type Barramento struct {
 	ram         *RAM
 	vram        *VRAM
 	perifericos *Perifericos
+	interrupcao controladorInterrupcao
 }
 
 func NovoBarramento(ram *RAM) *Barramento {
@@ -31,6 +32,14 @@ func (b *Barramento) transferir(
 ) (uint32, error) {
 	if endereco%4 != 0 {
 		return 0, fmt.Errorf("endereço desalinhado: 0x%08x", endereco)
+	}
+	if endereco == PortaRetorno {
+		if controle != Escrita || !b.interrupcao.ativo {
+			return 0, fmt.Errorf("retorno permitido somente por escrita durante interrupção")
+		}
+		b.interrupcao.retorno = true
+		b.Endereco, b.Dados, b.Controle = endereco, dados, controle
+		return dados, nil
 	}
 	var dispositivo interface {
 		LerPalavra(uint32) (uint32, error)

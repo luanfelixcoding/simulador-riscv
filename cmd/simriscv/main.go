@@ -19,6 +19,8 @@ func main() {
 	maximoPassos := flag.Int("max-passos", 100, "limite de passos (maior que zero)")
 	intervalo := flag.Int("video-a-cada", 10, "exibir VRAM a cada N instruções (maior que zero)")
 	entrada := flag.String("entrada", "", "texto ASCII disponível na porta de entrada")
+	periodo := flag.Uint("interromper-a-cada", 0, "interrupção após N instruções principais; 0 desativa")
+	tratador := flag.String("tratador", "", "arquivo .hex do tratador em 0x7f000")
 	flag.Parse()
 	if *intervalo <= 0 {
 		falhar("-video-a-cada deve ser maior que zero")
@@ -35,6 +37,23 @@ func main() {
 	computador, erro := maquina.Nova(palavras)
 	if erro != nil {
 		falhar("inicializar máquina: %v", erro)
+	}
+	if (*periodo == 0) != (*tratador == "") || uint64(*periodo) > 0xffffffff {
+		falhar("use -interromper-a-cada entre 1 e 4294967295 junto com -tratador")
+	}
+	if *periodo > 0 {
+		arquivoTratador, erro := os.Open(*tratador)
+		if erro != nil {
+			falhar("abrir tratador: %v", erro)
+		}
+		palavrasTratador, erro := carregador.LerHex(arquivoTratador)
+		arquivoTratador.Close()
+		if erro != nil {
+			falhar("carregar tratador: %v", erro)
+		}
+		if erro := computador.ConfigurarTemporizador(uint32(*periodo), palavrasTratador); erro != nil {
+			falhar("configurar interrupção: %v", erro)
+		}
 	}
 	if erro := computador.FornecerEntrada(*entrada); erro != nil {
 		falhar("%v", erro)
@@ -57,11 +76,18 @@ func executarPrograma(saida io.Writer, computador *maquina.Maquina, maximoPassos
 			fmt.Fprintf(saida, "PC=0x%08x\nFim da execução após %d passo(s)\n", computador.PC(), executados)
 			return nil
 		}
+		estavaInterrompido := computador.EmInterrupcao()
 		resultado, erro := computador.Passo()
 		if erro != nil {
 			return fmt.Errorf("passo %d: %w", executados+1, erro)
 		}
 		fmt.Fprintf(saida, "Passo %d: PC=0x%08x palavra=0x%08x %s próximo PC=0x%08x\n", executados+1, resultado.PC, resultado.Palavra, resultado.Operacao, resultado.ProximoPC)
+		if !estavaInterrompido && computador.EmInterrupcao() {
+			fmt.Fprintf(saida, "[Interrupção] entrada em 0x%08x\n", computador.PC())
+		}
+		if estavaInterrompido && !computador.EmInterrupcao() {
+			fmt.Fprintf(saida, "[Interrupção] retorno para 0x%08x\n", computador.PC())
+		}
 		exibirRegistradores(saida, computador.Registradores())
 		if texto := computador.ConsumirSaida(); texto != "" {
 			fmt.Fprintf(saida, "[E/S] %s\n", texto)

@@ -15,6 +15,7 @@ type Maquina struct {
 	pc            uint32
 	barramento    *Barramento
 	bytesPrograma uint32
+	iniciada      bool
 }
 
 type ResultadoPasso struct {
@@ -56,7 +57,9 @@ func Nova(palavras []uint32) (*Maquina, error) {
 func (maquina *Maquina) PC() uint32 { return maquina.pc }
 
 // Verifica se a execução da máquina foi finalizada (quando o PC atinge o fim do programa carregado)
-func (maquina *Maquina) Concluida() bool { return maquina.pc == maquina.bytesPrograma }
+func (maquina *Maquina) Concluida() bool {
+	return !maquina.EmInterrupcao() && maquina.pc == maquina.bytesPrograma
+}
 
 // Registradores devolve uma cópia para impedir alterações diretas no estado.
 func (maquina *Maquina) Registradores() [32]uint32 { return maquina.registradores }
@@ -68,7 +71,11 @@ func (maquina *Maquina) Passo() (ResultadoPasso, error) {
 	if maquina.Concluida() {
 		return ResultadoPasso{}, ErroProgramaConcluido
 	}
-	if pc%4 != 0 || pc > maquina.bytesPrograma || maquina.bytesPrograma-pc < 4 {
+	inicio, fim := uint32(0), maquina.bytesPrograma
+	if maquina.EmInterrupcao() {
+		inicio, fim = VetorInterrupcao, maquina.barramento.interrupcao.fim
+	}
+	if pc%4 != 0 || pc < inicio || pc >= fim {
 		return ResultadoPasso{}, fmt.Errorf("PC fora do programa ou desalinhado: 0x%08x", pc)
 	}
 	palavra, erro := maquina.LerPalavra(pc)
@@ -178,6 +185,9 @@ func (maquina *Maquina) Passo() (ResultadoPasso, error) {
 	regs[0] = 0
 	maquina.registradores = regs
 	maquina.pc = proximoPC
+	maquina.iniciada = true
+	maquina.atualizarInterrupcao()
+	proximoPC = maquina.pc
 	return ResultadoPasso{PC: pc, ProximoPC: proximoPC, Palavra: palavra, Operacao: instrucao.Operacao}, nil
 }
 
